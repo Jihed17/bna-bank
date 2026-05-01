@@ -80,3 +80,23 @@ jspm_packages/
 # Temporary folders
 tmp/
 temp/
+
+# Python / Django
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+staticfiles/
+media/
+db.sqlite3
+*.log
+
+# Django settings local overrides
+bna-backend/.env
+bna-backend/.env.local
+
+# Vite
+.vite/

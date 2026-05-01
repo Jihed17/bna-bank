@@ -1,0 +1,15 @@
+BNA Digital — demo accounts (created by `python manage.py seed`)
+
+Client
+  email:    client@bna.tn
+  password: client123
+
+Agent
+  email:    agent@bna.tn
+  password: agent123
+
+Admin
+  email:    admin@bna.tn
+  password: admin123
+
+Login URL: http://localhost:5173/login
