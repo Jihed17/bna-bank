@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import toast from 'react-hot-toast'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 import { extractError } from '../../store/api/baseApi'
 import {
@@ -7,22 +9,25 @@ import {
   useGetPendingQueueQuery,
   useRejectAppointmentMutation,
 } from '../../store/services/appointmentApi'
-import {
-  useGetAgenciesQuery,
-  useGetServicesQuery,
-} from '../../store/services/serviceApi'
+import { useCurrentUser } from '../../store/hooks'
 
+/**
+ * File d'attente — toujours scope à l'agence de l'agent côté backend
+ * (AppointmentManager.get_pending_appointments force `agency_id =
+ * agent.agency_id` quoi que le frontend envoie). Pas besoin de filtres
+ * ici : on liste directement les demandes PENDING de l'agence de l'agent
+ * connecté.
+ */
 export default function PendingQueue() {
-  const [serviceId, setServiceId] = useState('')
-  const [agencyId, setAgencyId] = useState('')
   const [rejectId, setRejectId] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
 
-  const { data: services = [] } = useGetServicesQuery({})
-  const { data: agencies = [] } = useGetAgenciesQuery({})
+  const currentUser = useCurrentUser()
+  const agencyName = currentUser?.agency_name
+
   const { data: queue = [], isLoading } = useGetPendingQueueQuery(
-    { service_id: serviceId, agency_id: agencyId },
-    { skip: !serviceId || !agencyId, pollingInterval: 30_000 },
+    {},
+    { pollingInterval: 30_000 },
   )
 
   const [accept, { isLoading: accepting }] = useAcceptAppointmentMutation()
@@ -48,46 +53,22 @@ export default function PendingQueue() {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">
-        File d'attente
-      </h2>
-
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <select
-          value={serviceId}
-          onChange={(e) => setServiceId(e.target.value)}
-          className="rounded-lg border-gray-200 text-sm focus:border-bna-primary focus:ring-bna-primary"
-        >
-          <option value="">Service</option>
-          {services.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={agencyId}
-          onChange={(e) => setAgencyId(e.target.value)}
-          className="rounded-lg border-gray-200 text-sm focus:border-bna-primary focus:ring-bna-primary"
-        >
-          <option value="">Agence</option>
-          {agencies.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-900">
+          File d'attente
+        </h2>
+        {agencyName && (
+          <span className="text-xs text-gray-500">
+            Agence · <span className="font-medium text-gray-700">{agencyName}</span>
+          </span>
+        )}
       </div>
 
-      {!serviceId || !agencyId ? (
-        <p className="text-sm text-gray-400 text-center py-8">
-          Sélectionnez un service et une agence pour voir la file.
-        </p>
-      ) : isLoading ? (
+      {isLoading ? (
         <p className="text-sm text-gray-400 animate-pulse">Chargement...</p>
       ) : queue.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-8">
-          Aucune demande en attente.
+          Aucune demande en attente dans votre agence.
         </p>
       ) : (
         <div className="space-y-3">
@@ -105,10 +86,14 @@ export default function PendingQueue() {
                     {appt.client_name}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {new Date(appt.scheduled_at).toLocaleString('fr-TN', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    })}
+                    {appt.service_name}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    📅 {format(parseISO(appt.scheduled_at), 'dd/MM/yyyy', { locale: fr })}
+                    {' · '}
+                    <span className="text-gray-700">
+                      {format(parseISO(appt.scheduled_at), 'HH:mm', { locale: fr })}
+                    </span>
                   </p>
                   {appt.reason && (
                     <p className="text-xs text-gray-400 mt-1 italic">

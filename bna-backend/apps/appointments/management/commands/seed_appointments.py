@@ -1,6 +1,6 @@
 """
-Generates demo appointment data for the seeded agent so the calendar
-views (month / week / day) show realistic content.
+Generate demo appointment data so the calendar (month / week / day),
+the agent queue, and the client appointment list all look populated.
 
 Run AFTER `manage.py seed` so the demo users / services / agencies / agent
 assignments already exist.
@@ -28,17 +28,39 @@ SLOT_HOURS = [9, 10, 11, 13, 14, 15, 16]
 SLOT_MINUTES = [0, 30]
 
 
+# 8 demo clients — keeps the (client, service, slot) uniqueness happy when
+# we generate many appointments at the same time slot.
+DEMO_CLIENTS = [
+    ('client@bna.tn',  'Sami',     'Ben Ali'),
+    ('fatma@bna.tn',   'Fatma',    'Khedher'),
+    ('mehdi@bna.tn',   'Mehdi',    'Sassi'),
+    ('leila@bna.tn',   'Leila',    'Trabelsi'),
+    ('amine@bna.tn',   'Amine',    'Gharbi'),
+    ('rim@bna.tn',     'Rim',      'Bouchnak'),
+    ('khaled@bna.tn',  'Khaled',   'Mejri'),
+    ('sirine@bna.tn',  'Sirine',   'Ayadi'),
+]
+
+
 class Command(BaseCommand):
-    help = 'Seed demo appointment data for the demo agent.'
+    help = 'Seed a large set of demo appointments across all agencies and agents.'
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--past', type=int, default=10,
-            help='Number of past COMPLETED appointments to create (default 10).',
+            '--past', type=int, default=60,
+            help='Number of past COMPLETED appointments to create (default 60).',
         )
         parser.add_argument(
-            '--future', type=int, default=30,
-            help='Number of future appointments to create across PENDING/ASSIGNED/CONFIRMED (default 30).',
+            '--future', type=int, default=150,
+            help='Number of future PENDING/ASSIGNED/CONFIRMED appointments (default 150).',
+        )
+        parser.add_argument(
+            '--days-back', type=int, default=45,
+            help='How many days into the past to spread completed RDV (default 45).',
+        )
+        parser.add_argument(
+            '--days-forward', type=int, default=35,
+            help='How many days forward to spread future RDV (default 35).',
         )
 
     def handle(self, *args, **options):
@@ -46,6 +68,7 @@ class Command(BaseCommand):
 
         agents = list(
             User.objects.filter(role=User.Role.AGENT, agency__isnull=False)
+            .select_related('agency')
         )
         if not agents:
             self.stderr.write(self.style.ERROR(
@@ -69,10 +92,8 @@ class Command(BaseCommand):
             clients = self._ensure_clients()
 
         self.stdout.write(
-            'Seeding demo appointments across {} agent(s): {}'.format(
-                len(agents),
-                ', '.join(a.email for a in agents),
-            )
+            f'Seeding demo appointments — {len(agents)} agents across '
+            f'{len(agencies)} agencies, {len(services)} services, {len(clients)} clients.'
         )
 
         # ── Generate ─────────────────────────────────────────────────────
@@ -84,46 +105,54 @@ class Command(BaseCommand):
             Appointment.Status.PENDING: 0,
         }
 
-        # Past — all COMPLETED.
-        past_attempted = 0
+        # ── Past — all COMPLETED ─────────────────────────────────────────
+        # Try ~4 slots per business day, walking back day by day.
+        target_past = options['past']
         days_back = 1
-        while counts[Appointment.Status.COMPLETED] < options['past'] and days_back < 30:
-            slot = self._pick_slot(now - timedelta(days=days_back))
-            if slot is None:
-                days_back += 1
-                continue
-            client = random.choice(clients)
-            service = random.choice(services)
-            agent = random.choice(agents)
-            agency = agent.agency
-            ok = self._make_appt(
-                client, service, agency, agent, slot,
-                Appointment.Status.COMPLETED,
-            )
-            if ok:
-                counts[Appointment.Status.COMPLETED] += 1
-            past_attempted += 1
-            days_back += 1 if past_attempted % 2 == 0 else 0
-
-        # Future — mix of statuses.
-        future_target = options['future']
-        days_forward = 1
-        future_attempted = 0
-        future_done = 0
-        while future_done < future_target and days_forward < 35:
-            for _ in range(2):  # try up to 2 slots per day
-                if future_done >= future_target:
+        attempts = 0
+        max_back = options['days_back']
+        slots_per_day = 4
+        while counts[Appointment.Status.COMPLETED] < target_past and days_back < max_back:
+            base_day = now - timedelta(days=days_back)
+            for _ in range(slots_per_day):
+                if counts[Appointment.Status.COMPLETED] >= target_past:
                     break
-                slot = self._pick_slot(now + timedelta(days=days_forward))
+                slot = self._pick_slot(base_day)
                 if slot is None:
                     break
                 client = random.choice(clients)
                 service = random.choice(services)
                 agent = random.choice(agents)
-                agency = agent.agency
+                ok = self._make_appt(
+                    client, service, agent.agency, agent, slot,
+                    Appointment.Status.COMPLETED,
+                )
+                if ok:
+                    counts[Appointment.Status.COMPLETED] += 1
+                attempts += 1
+            days_back += 1
 
-                # Distribute statuses: ~30% PENDING (in queue, not on cal),
-                # ~35% ASSIGNED, ~35% CONFIRMED.
+        # ── Future — mix of PENDING / ASSIGNED / CONFIRMED ───────────────
+        target_future = options['future']
+        days_forward = 1
+        future_done = 0
+        max_forward = options['days_forward']
+        slots_per_day = 6
+        while future_done < target_future and days_forward < max_forward:
+            base_day = now + timedelta(days=days_forward)
+            for _ in range(slots_per_day):
+                if future_done >= target_future:
+                    break
+                slot = self._pick_slot(base_day)
+                if slot is None:
+                    break
+                client = random.choice(clients)
+                service = random.choice(services)
+                agent = random.choice(agents)
+
+                # Distribute statuses: ~30% PENDING (in agent queue),
+                # ~35% ASSIGNED (awaiting client confirm),
+                # ~35% CONFIRMED (locked on calendar).
                 roll = random.random()
                 if roll < 0.30:
                     status = Appointment.Status.PENDING
@@ -132,11 +161,10 @@ class Command(BaseCommand):
                 else:
                     status = Appointment.Status.CONFIRMED
 
-                ok = self._make_appt(client, service, agency, agent, slot, status)
+                ok = self._make_appt(client, service, agent.agency, agent, slot, status)
                 if ok:
                     counts[status] += 1
                     future_done += 1
-                future_attempted += 1
             days_forward += 1
 
         self.stdout.write(self.style.SUCCESS('\nSeed complete.'))
@@ -146,25 +174,21 @@ class Command(BaseCommand):
         self.stdout.write(f'  ASSIGNED         : {counts[Appointment.Status.ASSIGNED]}')
         self.stdout.write(f'  PENDING (queue)  : {counts[Appointment.Status.PENDING]}')
         self.stdout.write('')
-        self.stdout.write('Login as agent@bna.tn or agent2@bna.tn (password agent123) to see them on the calendar.')
+        self.stdout.write(
+            'Login as any agent (password "agent123") to see their pinned-agency calendar.'
+        )
 
     # ── Helpers ─────────────────────────────────────────────────────────
 
     def _ensure_clients(self):
-        """Make sure 4 demo clients exist; return them all."""
-        targets = [
-            ('client@bna.tn', 'Sami', 'Ben Ali', 'client123'),
-            ('fatma@bna.tn', 'Fatma', 'Khedher', 'client123'),
-            ('mehdi@bna.tn', 'Mehdi', 'Sassi', 'client123'),
-            ('leila@bna.tn', 'Leila', 'Trabelsi', 'client123'),
-        ]
+        """Make sure all demo clients exist; return them all."""
         clients = []
-        for email, fn, ln, pw in targets:
+        for email, fn, ln in DEMO_CLIENTS:
             try:
                 u = User.objects.get(email=email)
             except User.DoesNotExist:
                 u = IdentityManager.register_guest(
-                    email=email, password=pw,
+                    email=email, password='client123',
                     first_name=fn, last_name=ln,
                 )
             clients.append(u)
@@ -190,7 +214,7 @@ class Command(BaseCommand):
                 reason=f'RDV pour {service.name.lower()}.',
             )
         except Exception:
-            # Conflict on (client, service, slot) — skip silently.
+            # Conflict on (client, service, slot) or capacity — skip silently.
             return False
 
         if target_status == Appointment.Status.PENDING:

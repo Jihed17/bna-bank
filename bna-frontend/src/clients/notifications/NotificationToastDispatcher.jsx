@@ -18,7 +18,7 @@ const EVENT_MESSAGES = {
 /**
  * Side-effect-only component. Polls /api/notifications/ on the same
  * cadence as the bell (RTK Query dedupes the request) and fires a toast
- * the first time it sees a new QUEUED in-app notification this session.
+ * the first time it sees a new unread in-app notification this session.
  *
  * Notifications that already existed when the page loaded are seeded
  * into the seenIds set so the user doesn't get a flood of toasts on
@@ -52,7 +52,8 @@ export default function NotificationToastDispatcher() {
     }
 
     notifications.forEach((notif) => {
-      if (notif.status !== 'queued') return
+      if (notif.channel !== 'in_app') return
+      if (notif.read_at != null) return
       if (seenIds.current.has(notif.id)) return
 
       seenIds.current.add(notif.id)

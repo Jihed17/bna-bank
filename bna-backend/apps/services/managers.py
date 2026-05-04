@@ -417,11 +417,22 @@ class ServiceManager(AuditMixin):
         *,
         status: str | None = None,
         service_id: int | None = None,
+        city: str | None = None,
     ) -> list[Agency]:
-        """Return agencies, optionally filtered by status or service. Public."""
+        """Return agencies, optionally filtered by status, service, or city.
+        Public."""
         if service_id is not None:
-            return AgencyAccess.get_agencies_by_service(service_id=service_id)
-        return AgencyAccess.get_all_agencies(status=status)
+            agencies = AgencyAccess.get_agencies_by_service(service_id=service_id)
+            if city:
+                needle = city.strip().lower()
+                agencies = [a for a in agencies if a.city.lower() == needle]
+            return agencies
+        return AgencyAccess.get_all_agencies(status=status, city=city)
+
+    @staticmethod
+    def get_agency_cities() -> list[str]:
+        """Return the distinct list of cities — fuels the agency filter UI."""
+        return AgencyAccess.get_agency_cities()
 
     @staticmethod
     def get_agency(*, agency_id: int) -> Agency:

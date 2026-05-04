@@ -49,8 +49,11 @@ class AgentScheduleSerializer(serializers.Serializer):
 
 
 class PendingQueueSerializer(serializers.Serializer):
-    service_id = serializers.IntegerField()
-    agency_id = serializers.IntegerField()
+    """Both filters optional: agents are auto-scoped to their own agency
+    by AppointmentManager.get_pending_appointments; service_id is purely
+    a refinement."""
+    service_id = serializers.IntegerField(required=False, allow_null=True)
+    agency_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 # ── Output serializers ─────────────────────────────────────────────────────

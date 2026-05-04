@@ -30,6 +30,8 @@ class UserAccess:
         last_name: str,
         phone: str = '',
         preferred_language: str = 'fr',
+        gender: str = '',
+        identity_image=None,
     ) -> User:
         if User.objects.filter(email__iexact=email).exists():
             raise EmailAlreadyRegistered()
@@ -42,10 +44,14 @@ class UserAccess:
                 last_name=last_name.strip(),
                 phone=phone.strip(),
                 preferred_language=preferred_language,
+                gender=gender or '',
                 role=User.Role.GUEST,
                 status=User.AccountStatus.PENDING,
                 password=make_password(password),
             )
+            if identity_image is not None:
+                user.identity_image = identity_image
+                user.save(update_fields=['identity_image'])
         return user
 
     @staticmethod
@@ -102,6 +108,8 @@ class UserAccess:
         preferred_language: str | None = None,
         notification_email: bool | None = None,
         notification_sms: bool | None = None,
+        gender: str | None = None,
+        identity_image=None,
     ) -> User:
         try:
             user = User.objects.get(pk=user_id)
@@ -131,6 +139,12 @@ class UserAccess:
         if notification_sms is not None:
             user.notification_sms = notification_sms
             updated_fields.append('notification_sms')
+        if gender is not None:
+            user.gender = gender
+            updated_fields.append('gender')
+        if identity_image is not None:
+            user.identity_image = identity_image
+            updated_fields.append('identity_image')
 
         with transaction.atomic():
             user.save(update_fields=updated_fields)
@@ -166,6 +180,39 @@ class UserAccess:
         with transaction.atomic():
             user.role = role
             user.save(update_fields=['role', 'updated_at'])
+
+        return user
+
+    @staticmethod
+    def archive_user(*, user_id: int) -> User:
+        """
+        Soft-archive a user: set status=CLOSED. Login is blocked because
+        UserAccess.authenticate refuses any account whose status != ACTIVE.
+        The row is preserved (FKs remain intact, history is audit-readable).
+        Use this instead of delete_user when the user has business history.
+        """
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            raise UserNotFound()
+
+        with transaction.atomic():
+            user.status = User.AccountStatus.CLOSED
+            user.save(update_fields=['status', 'updated_at'])
+
+        return user
+
+    @staticmethod
+    def reactivate_account(*, user_id: int) -> User:
+        """Bring a SUSPENDED or CLOSED account back to ACTIVE."""
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            raise UserNotFound()
+
+        with transaction.atomic():
+            user.status = User.AccountStatus.ACTIVE
+            user.save(update_fields=['status', 'updated_at'])
 
         return user
 
@@ -280,6 +327,41 @@ class UserAccess:
             try:
                 token_obj = PasswordResetToken.objects.select_for_update().get(token=token)
             except PasswordResetToken.DoesNotExist:
+                return None
+
+            if not token_obj.is_valid():
+                return None
+
+            token_obj.used = True
+            token_obj.save(update_fields=['used'])
+
+        return token_obj.user
+
+    @staticmethod
+    def store_email_verification_token(*, user_id: int) -> str:
+        """Generate and persist an email-verification token; return the raw string."""
+        from .models import EmailVerificationToken
+
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            raise UserNotFound()
+
+        token_obj = EmailVerificationToken.generate(user=user)
+        return token_obj.token
+
+    @staticmethod
+    def consume_email_verification_token(*, token: str) -> User | None:
+        """
+        Validate and consume an email-verification token. Returns the user
+        on success, None on missing / expired / already used.
+        """
+        from .models import EmailVerificationToken
+
+        with transaction.atomic():
+            try:
+                token_obj = EmailVerificationToken.objects.select_for_update().get(token=token)
+            except EmailVerificationToken.DoesNotExist:
                 return None
 
             if not token_obj.is_valid():

@@ -77,6 +77,67 @@ class EmailAdapter(BaseChannelAdapter):
         )
 
 
+# ── Gmail OAuth 2.0 adapter ─────────────────────────────────────────────────
+
+class GmailOAuthAdapter(BaseChannelAdapter):
+    """
+    Sends mail through the Gmail API using a long-lived OAuth 2.0
+    refresh_token. Used in production when SMTP App Passwords are
+    disabled or when the team needs Google's audit/revocation flow.
+
+    Activation: all four GMAIL_OAUTH_* settings must be populated.
+    The CHANNEL_ADAPTERS registry below picks this adapter automatically
+    when GMAIL_OAUTH_REFRESH_TOKEN is set; otherwise EmailAdapter (SMTP)
+    is used. No call site changes.
+    """
+
+    def send(self, notification: Notification) -> None:
+        import base64
+        from email.mime.text import MIMEText
+
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+
+        creds = Credentials(
+            token=None,
+            refresh_token=settings.GMAIL_OAUTH_REFRESH_TOKEN,
+            client_id=settings.GMAIL_OAUTH_CLIENT_ID,
+            client_secret=settings.GMAIL_OAUTH_CLIENT_SECRET,
+            token_uri='https://oauth2.googleapis.com/token',
+            scopes=['https://www.googleapis.com/auth/gmail.send'],
+        )
+
+        subject = render(
+            event_type=notification.event_type,
+            format='subject',
+            payload=notification.payload,
+        )
+        body = render(
+            event_type=notification.event_type,
+            format='body',
+            payload=notification.payload,
+        )
+
+        message = MIMEText(body)
+        message['to'] = notification.recipient.email
+        message['from'] = settings.GMAIL_OAUTH_SENDER
+        message['subject'] = subject
+
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
+        service.users().messages().send(userId='me', body={'raw': raw}).execute()
+
+        logger.info(
+            'gmail_oauth_email_sent',
+            extra={
+                'notification_id': notification.pk,
+                'recipient': notification.recipient.email,
+                'event_type': notification.event_type,
+            },
+        )
+
+
 # ── SMS adapter (stub) ──────────────────────────────────────────────────────
 
 class SMSAdapter(BaseChannelAdapter):
@@ -155,8 +216,15 @@ class PushAdapter(BaseChannelAdapter):
 # ── Adapter registry ────────────────────────────────────────────────────────
 # New channel = new adapter class + one entry here. Zero other changes.
 
+def _select_email_adapter() -> BaseChannelAdapter:
+    """Use Gmail API when an OAuth refresh_token is set; SMTP otherwise."""
+    if getattr(settings, 'GMAIL_OAUTH_REFRESH_TOKEN', ''):
+        return GmailOAuthAdapter()
+    return EmailAdapter()
+
+
 CHANNEL_ADAPTERS: dict = {
-    Notification.Channel.EMAIL: EmailAdapter(),
+    Notification.Channel.EMAIL: _select_email_adapter(),
     Notification.Channel.SMS: SMSAdapter(),
     Notification.Channel.IN_APP: InAppAdapter(),
     Notification.Channel.PUSH: PushAdapter(),

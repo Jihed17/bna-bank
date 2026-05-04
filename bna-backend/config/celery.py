@@ -12,10 +12,17 @@ app.autodiscover_tasks()
 logger = get_task_logger(__name__)
 
 
+app.conf.beat_schedule = {
+    # Hourly scan for RDVs starting in ~24h that haven't been reminded yet.
+    'scan-appointment-reminders': {
+        'task': 'apps.notifications.tasks.scan_appointment_reminders',
+        'schedule': 60 * 60,  # every hour
+        'options': {'queue': 'notifications'},
+    },
+}
+
+
 @app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
-    """
-    Periodic tasks registered here in Phase 3.
-    NotifyingEngine dispatch tasks added in Phase 4.
-    """
+    """Periodic tasks are declared via app.conf.beat_schedule above."""
     pass

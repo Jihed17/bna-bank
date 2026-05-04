@@ -206,9 +206,9 @@ class PendingQueueView(APIView):
         serializer.is_valid(raise_exception=True)
 
         appointments = AppointmentManager.get_pending_appointments(
-            service_id=serializer.validated_data['service_id'],
-            agency_id=serializer.validated_data['agency_id'],
             requesting_user_id=request.user.pk,
+            service_id=serializer.validated_data.get('service_id'),
+            agency_id=serializer.validated_data.get('agency_id'),
         )
 
         return success(

@@ -27,7 +27,10 @@ const baseQueryWithAuth = fetchBaseQuery({
     if (token) {
       headers.set('Authorization', `Bearer ${token}`)
     }
-    headers.set('Content-Type', 'application/json')
+    // Content-Type is intentionally not forced — fetchBaseQuery sets
+    // application/json automatically for plain-object bodies, and the
+    // browser sets multipart/form-data with the right boundary when the
+    // body is a FormData instance (for identity image uploads).
     return headers
   },
 })

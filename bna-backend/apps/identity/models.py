@@ -20,6 +20,10 @@ class User(AbstractUser):
         SUSPENDED = 'suspended', 'Suspendu'
         CLOSED = 'closed', 'Clôturé'
 
+    class Gender(models.TextChoices):
+        MALE = 'male', 'Homme'
+        FEMALE = 'female', 'Femme'
+
     role = models.CharField(
         max_length=20,
         choices=Role.choices,
@@ -36,6 +40,22 @@ class User(AbstractUser):
     phone = models.CharField(max_length=20, blank=True, default='')
     date_of_birth = models.DateField(null=True, blank=True)
     national_id = models.CharField(max_length=50, blank=True, default='')
+
+    gender = models.CharField(
+        max_length=10,
+        choices=Gender.choices,
+        blank=True,
+        default='',
+    )
+
+    # Scan / photo of the user's national ID, passport, etc. Used by
+    # the admin during the approval workflow. Stored under MEDIA_ROOT/
+    # identity_documents/<user_id>/<filename>.
+    identity_image = models.ImageField(
+        upload_to='identity_documents/',
+        null=True,
+        blank=True,
+    )
 
     preferred_language = models.CharField(
         max_length=5,
@@ -56,6 +76,12 @@ class User(AbstractUser):
         on_delete=models.PROTECT,
         related_name='agents',
     )
+
+    # Last successful login fingerprint, used to detect new-device logins.
+    # Populated by IdentityManager.authenticate(); compared on every login
+    # to decide whether to fire LoginNewDeviceEvent.
+    last_login_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_login_user_agent = models.CharField(max_length=512, blank=True, default='')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -110,4 +136,41 @@ class PasswordResetToken(models.Model):
             user=user,
             token=secrets.token_urlsafe(48),
             expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+
+class EmailVerificationToken(models.Model):
+    """
+    Single-use token sent to the user's email after registration.
+    Consuming it promotes the GUEST account to CLIENT/ACTIVE.
+    Expires after 24 hours.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='email_verification_tokens',
+    )
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'identity_email_verification_token'
+        verbose_name = 'Jeton de vérification email'
+
+    def is_valid(self) -> bool:
+        return not self.used and self.expires_at > timezone.now()
+
+    def __str__(self):
+        return f'Verification token for {self.user.email} (used={self.used})'
+
+    @classmethod
+    def generate(cls, *, user: 'User') -> 'EmailVerificationToken':
+        """Invalidate prior unused tokens for this user, then mint a new one."""
+        cls.objects.filter(user=user, used=False).update(used=True)
+        return cls.objects.create(
+            user=user,
+            token=secrets.token_urlsafe(48),
+            expires_at=timezone.now() + timedelta(hours=24),
         )

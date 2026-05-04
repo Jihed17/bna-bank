@@ -724,17 +724,29 @@ class AppointmentManager(AuditMixin):
     @staticmethod
     def get_pending_appointments(
         *,
-        service_id: int,
-        agency_id: int,
         requesting_user_id: int,
+        service_id: int | None = None,
+        agency_id: int | None = None,
     ) -> list[Appointment]:
-        """All PENDING appointments for a service/agency. Agents + admins only."""
+        """Return PENDING appointments visible to the requester.
+
+        - Agents are always scoped to their own agency, regardless of the
+          `agency_id` filter (security: an agent cannot peek at another
+          agency's queue). `service_id` remains an optional refinement.
+        - Admins see all pending RDV by default; both filters are optional.
+        - Clients are forbidden.
+        """
         requester = UserAccess.get_profile(user_id=requesting_user_id)
 
         if requester.role == User.Role.CLIENT:
             raise PermissionError(
                 "Les clients n'ont pas accès à la file d'attente."
             )
+
+        if requester.role == User.Role.AGENT:
+            # Force scope to the agent's pinned agency. Returns empty if
+            # the agent isn't pinned yet.
+            agency_id = requester.agency_id
 
         return AppointmentAccess.get_pending_for_service_agency(
             service_id=service_id,

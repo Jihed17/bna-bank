@@ -1,9 +1,11 @@
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.identity.managers import IdentityManager
 from apps.identity.serializers import (
     AuthOutputSerializer,
+    EmailVerifySerializer,
     LoginSerializer,
     LogoutSerializer,
     PasswordChangeSerializer,
@@ -23,8 +25,12 @@ class RegisterView(APIView):
     POST /api/identity/register/
     Creates a GUEST in PENDING status. An admin must approve before the
     account can log in (see /users/{id}/approve/).
+
+    Accepts both JSON and multipart (the latter is used when the user
+    uploads an identity_image).
     """
     permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -32,7 +38,7 @@ class RegisterView(APIView):
 
         user = IdentityManager.register_pending_guest(**serializer.validated_data)
 
-        return created(UserOutputSerializer(user).data)
+        return created(UserOutputSerializer(user, context={'request': request}).data)
 
 
 class LoginView(APIView):
@@ -43,7 +49,19 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        result = IdentityManager.authenticate(**serializer.validated_data)
+        forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
+        request_ip = (
+            forwarded.split(',')[0].strip()
+            if forwarded
+            else request.META.get('REMOTE_ADDR', '')
+        )
+        request_user_agent = request.META.get('HTTP_USER_AGENT', '')[:512]
+
+        result = IdentityManager.authenticate(
+            **serializer.validated_data,
+            request_ip=request_ip,
+            request_user_agent=request_user_agent,
+        )
 
         return success(AuthOutputSerializer(result).data)
 
@@ -64,12 +82,17 @@ class LogoutView(APIView):
 
 
 class ProfileView(APIView):
-    """GET/PUT /api/identity/profile/ — own profile read and update."""
+    """GET/PUT /api/identity/profile/ — own profile read and update.
+
+    PUT accepts both JSON and multipart — the latter is used when the
+    user uploads an identity_image.
+    """
     permission_classes = [IsGuest]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
         user = IdentityManager.get_profile(user_id=request.user.pk)
-        return success(UserOutputSerializer(user).data)
+        return success(UserOutputSerializer(user, context={'request': request}).data)
 
     def put(self, request):
         serializer = ProfileUpdateSerializer(data=request.data)
@@ -81,7 +104,7 @@ class ProfileView(APIView):
             **serializer.validated_data,
         )
 
-        return success(UserOutputSerializer(user).data)
+        return success(UserOutputSerializer(user, context={'request': request}).data)
 
 
 class PasswordChangeView(APIView):
@@ -132,6 +155,21 @@ class PasswordResetConfirmView(APIView):
         return no_content()
 
 
+class EmailVerifyView(APIView):
+    """POST /api/identity/verify-email/ — consume verification token, promote to CLIENT."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = EmailVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = IdentityManager.verify_email(
+            token=serializer.validated_data['token'],
+        )
+
+        return success(UserOutputSerializer(user, context={'request': request}).data)
+
+
 # ── Admin-only views ───────────────────────────────────────────────────────
 
 class UserListAdminView(APIView):
@@ -157,10 +195,10 @@ class UserListAdminView(APIView):
             if status_param is None:
                 # Backwards-compat: agents endpoint filtered to ACTIVE only.
                 qs = qs.filter(status=User.AccountStatus.ACTIVE)
-        if status_param:
+        if status_param and status_param != 'all':
             qs = qs.filter(status=status_param)
 
-        return success(UserOutputSerializer(qs, many=True).data)
+        return success(UserOutputSerializer(qs, many=True, context={'request': request}).data)
 
 
 class PendingGuestsView(APIView):
@@ -173,7 +211,7 @@ class PendingGuestsView(APIView):
 
     def get(self, request):
         users = IdentityManager.get_pending_guests()
-        return success(UserOutputSerializer(users, many=True).data)
+        return success(UserOutputSerializer(users, many=True, context={'request': request}).data)
 
 
 class ApproveGuestView(APIView):
@@ -185,7 +223,7 @@ class ApproveGuestView(APIView):
             user_id=user_id,
             admin_id=request.user.pk,
         )
-        return success(UserOutputSerializer(user).data)
+        return success(UserOutputSerializer(user, context={'request': request}).data)
 
 
 class RejectGuestView(APIView):
@@ -199,19 +237,48 @@ class RejectGuestView(APIView):
             admin_id=request.user.pk,
             reason=reason,
         )
-        return success(UserOutputSerializer(user).data)
+        return success(UserOutputSerializer(user, context={'request': request}).data)
 
 
 class DeleteUserView(APIView):
-    """DELETE /api/identity/users/{user_id}/delete/ — admin hard-deletes."""
+    """DELETE /api/identity/users/{user_id}/delete/ — remove a user.
+
+    Tries hard delete; falls back to archiving (status=CLOSED) when FKs
+    prevent it. Returns 200 with {'mode': 'deleted'|'archived'} so the
+    admin UI can surface what actually happened.
+    """
     permission_classes = [IsAdmin]
 
     def delete(self, request, user_id: int):
-        IdentityManager.delete_user(
+        result = IdentityManager.delete_user(
             user_id=user_id,
             admin_id=request.user.pk,
         )
-        return no_content()
+        return success(result)
+
+
+class ArchiveUserView(APIView):
+    """POST /api/identity/users/{user_id}/archive/ — soft-archive."""
+    permission_classes = [IsAdmin]
+
+    def post(self, request, user_id: int):
+        user = IdentityManager.archive_user(
+            user_id=user_id,
+            admin_id=request.user.pk,
+        )
+        return success(UserOutputSerializer(user, context={'request': request}).data)
+
+
+class ReactivateAccountView(APIView):
+    """POST /api/identity/users/{user_id}/reactivate/ — restore to ACTIVE."""
+    permission_classes = [IsAdmin]
+
+    def post(self, request, user_id: int):
+        user = IdentityManager.reactivate_account(
+            user_id=user_id,
+            admin_id=request.user.pk,
+        )
+        return success(UserOutputSerializer(user, context={'request': request}).data)
 
 
 class UserDetailAdminView(APIView):
@@ -220,7 +287,7 @@ class UserDetailAdminView(APIView):
 
     def get(self, request, user_id: int):
         user = IdentityManager.get_profile(user_id=user_id)
-        return success(UserOutputSerializer(user).data)
+        return success(UserOutputSerializer(user, context={'request': request}).data)
 
 
 class AssignRoleView(APIView):
@@ -237,7 +304,7 @@ class AssignRoleView(APIView):
             admin_id=request.user.pk,
         )
 
-        return success(UserOutputSerializer(user).data)
+        return success(UserOutputSerializer(user, context={'request': request}).data)
 
 
 class SuspendAccountView(APIView):
@@ -249,4 +316,4 @@ class SuspendAccountView(APIView):
             user_id=user_id,
             admin_id=request.user.pk,
         )
-        return success(UserOutputSerializer(user).data)
+        return success(UserOutputSerializer(user, context={'request': request}).data)

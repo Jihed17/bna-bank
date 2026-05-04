@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
+import SearchBar, { matchesQuery } from '../../components/SearchBar'
 import { extractError } from '../../store/api/baseApi'
 import {
   useApproveGuestMutation,
@@ -19,8 +20,21 @@ export default function PendingRegistrationsPanel() {
 
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [query, setQuery] = useState('')
 
   const busy = approving || rejecting || deleting
+
+  const filtered = useMemo(
+    () => pending.filter((u) => matchesQuery(
+      query,
+      u.first_name,
+      u.last_name,
+      u.full_name,
+      u.email,
+      u.phone,
+    )),
+    [pending, query],
+  )
 
   const handleApprove = async (user) => {
     const result = await approve(user.id)
@@ -56,6 +70,13 @@ export default function PendingRegistrationsPanel() {
 
   return (
     <div>
+      <SearchBar
+        value={query}
+        onChange={setQuery}
+        placeholder="Rechercher une inscription (nom, email, téléphone…)"
+        className="mb-4 max-w-md"
+      />
+
       {pending.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
           <div className="text-3xl mb-2">✨</div>
@@ -63,33 +84,63 @@ export default function PendingRegistrationsPanel() {
             Aucune inscription en attente.
           </p>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-500">
+          Aucune inscription ne correspond à « {query} ».
+        </div>
       ) : (
         <div className="space-y-3">
-          {pending.map((user) => (
+          {filtered.map((user) => (
             <div
               key={user.id}
               className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm flex items-center justify-between"
             >
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900">
-                    {user.full_name || `${user.first_name} ${user.last_name}`}
-                  </h3>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
-                    {user.status_display}
-                  </span>
+              <div className="flex items-start gap-4 flex-1 min-w-0">
+                {user.identity_image_url ? (
+                  <a
+                    href={user.identity_image_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Voir la pièce d'identité"
+                    className="flex-shrink-0"
+                  >
+                    <img
+                      src={user.identity_image_url}
+                      alt="Pièce d'identité"
+                      className="w-16 h-16 object-cover rounded-lg border border-gray-200 hover:border-bna-primary"
+                    />
+                  </a>
+                ) : (
+                  <div className="flex-shrink-0 w-16 h-16 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-gray-300 text-2xl">
+                    🆔
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-gray-900">
+                      {user.full_name || `${user.first_name} ${user.last_name}`}
+                    </h3>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
+                      {user.status_display}
+                    </span>
+                    {user.gender_display && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        {user.gender_display}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {user.email}
+                    {user.phone && ` · ${user.phone}`}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    inscrit{' '}
+                    {formatDistanceToNow(new Date(user.created_at), {
+                      addSuffix: true,
+                      locale: fr,
+                    })}
+                  </p>
                 </div>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {user.email}
-                  {user.phone && ` · ${user.phone}`}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  inscrit{' '}
-                  {formatDistanceToNow(new Date(user.created_at), {
-                    addSuffix: true,
-                    locale: fr,
-                  })}
-                </p>
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0 ml-4">

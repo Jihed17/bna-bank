@@ -36,6 +36,12 @@ export const serviceApi = createApi({
       providesTags: ['Agency'],
     }),
 
+    getAgencyCities: builder.query({
+      query: () => '/services/agencies/cities/',
+      transformResponse: (response) => response.data,
+      providesTags: ['Agency'],
+    }),
+
     getAgency: builder.query({
       query: (agencyId) => `/services/agencies/${agencyId}/`,
       transformResponse: (response) => response.data,
@@ -159,6 +165,7 @@ export const {
   useGetServicesQuery,
   useGetServiceQuery,
   useGetAgenciesQuery,
+  useGetAgencyCitiesQuery,
   useGetAgencyQuery,
   useCreateServiceMutation,
   useUpdateServiceMutation,

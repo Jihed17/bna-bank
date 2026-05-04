@@ -1,10 +1,12 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import AgencyFormModal from '../clients/admin/AgencyFormModal'
 import AgentAssignPanel from '../clients/admin/AgentAssignPanel'
 import PendingRegistrationsPanel from '../clients/admin/PendingRegistrationsPanel'
 import ServiceFormModal from '../clients/admin/ServiceFormModal'
+import UsersPanel from '../clients/admin/UsersPanel'
+import SearchBar, { matchesQuery } from '../components/SearchBar'
 import { extractError } from '../store/api/baseApi'
 import {
   useGetAgentsQuery,
@@ -13,6 +15,7 @@ import {
 import {
   useCloseAgencyMutation,
   useGetAgenciesQuery,
+  useGetAgencyCitiesQuery,
   useGetServicesQuery,
   useReactivateServiceMutation,
   useSuspendServiceMutation,
@@ -25,12 +28,36 @@ export default function AdminDashboard() {
   const [agencyModal, setAgencyModal] = useState(null)
   const [assignPanel, setAssignPanel] = useState(null) // service object
 
+  const [serviceQuery, setServiceQuery] = useState('')
+  const [agencyQuery, setAgencyQuery] = useState('')
+  const [agencyCity, setAgencyCity] = useState('')
+
   const { data: services = [], isLoading: loadingServices } = useGetServicesQuery({})
   const { data: agencies = [], isLoading: loadingAgencies } = useGetAgenciesQuery({})
+  const { data: cities = [] } = useGetAgencyCitiesQuery()
   const { data: agents = [] } = useGetAgentsQuery()
   const { data: pending = [] } = useGetPendingGuestsQuery(undefined, {
     pollingInterval: 60_000,
   })
+
+  const filteredServices = useMemo(
+    () => services.filter((s) => matchesQuery(
+      serviceQuery,
+      s.name,
+      s.description,
+      s.category_display,
+      s.type_display,
+    )),
+    [services, serviceQuery],
+  )
+
+  const filteredAgencies = useMemo(
+    () => agencies.filter((a) => {
+      if (agencyCity && a.city !== agencyCity) return false
+      return matchesQuery(agencyQuery, a.name, a.address, a.city, a.email)
+    }),
+    [agencies, agencyQuery, agencyCity],
+  )
 
   const [suspendService] = useSuspendServiceMutation()
   const [reactivateService] = useReactivateServiceMutation()
@@ -64,6 +91,8 @@ export default function AdminDashboard() {
         ? `👥 Inscriptions (${pending.length})`
         : '👥 Inscriptions',
     },
+    { id: 'clients', label: '🧑 Clients' },
+    { id: 'agents',  label: '🧑‍💼 Agents' },
   ]
 
   return (
@@ -88,10 +117,16 @@ export default function AdminDashboard() {
 
       {tab === 'services' && (
         <div>
-          <div className="flex justify-end mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <SearchBar
+              value={serviceQuery}
+              onChange={setServiceQuery}
+              placeholder="Rechercher un service (nom, catégorie…)"
+              className="sm:max-w-md flex-1"
+            />
             <button
               onClick={() => setServiceModal('create')}
-              className="px-4 py-2 bg-bna-primary text-white rounded-lg text-sm hover:bg-bna-secondary"
+              className="px-4 py-2 bg-bna-primary text-white rounded-lg text-sm hover:bg-bna-secondary whitespace-nowrap"
             >
               + Nouveau service
             </button>
@@ -99,9 +134,13 @@ export default function AdminDashboard() {
 
           {loadingServices ? (
             <p className="text-gray-400">Chargement...</p>
+          ) : filteredServices.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-500">
+              Aucun service ne correspond à « {serviceQuery} ».
+            </div>
           ) : (
             <div className="space-y-3">
-              {services.map((service) => (
+              {filteredServices.map((service) => (
                 <div
                   key={service.id}
                   className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm flex items-center justify-between"
@@ -163,20 +202,54 @@ export default function AdminDashboard() {
 
       {tab === 'agencies' && (
         <div>
-          <div className="flex justify-end mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+            <SearchBar
+              value={agencyQuery}
+              onChange={setAgencyQuery}
+              placeholder="Rechercher une agence (nom, adresse, ville…)"
+              className="sm:max-w-md flex-1"
+            />
             <button
               onClick={() => setAgencyModal('create')}
-              className="px-4 py-2 bg-bna-primary text-white rounded-lg text-sm hover:bg-bna-secondary"
+              className="px-4 py-2 bg-bna-primary text-white rounded-lg text-sm hover:bg-bna-secondary whitespace-nowrap"
             >
               + Nouvelle agence
             </button>
           </div>
 
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={() => setAgencyCity('')}
+              className={`px-3 py-1 rounded-full text-xs transition-colors
+                ${!agencyCity
+                  ? 'bg-bna-primary text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              Toutes les villes
+            </button>
+            {cities.map((c) => (
+              <button
+                key={c}
+                onClick={() => setAgencyCity(c)}
+                className={`px-3 py-1 rounded-full text-xs transition-colors
+                  ${agencyCity === c
+                    ? 'bg-bna-primary text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
           {loadingAgencies ? (
             <p className="text-gray-400">Chargement...</p>
+          ) : filteredAgencies.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-500">
+              Aucune agence ne correspond à votre recherche.
+            </div>
           ) : (
             <div className="space-y-3">
-              {agencies.map((agency) => (
+              {filteredAgencies.map((agency) => (
                 <div
                   key={agency.id}
                   className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm flex items-center justify-between"
@@ -222,6 +295,8 @@ export default function AdminDashboard() {
       )}
 
       {tab === 'pending' && <PendingRegistrationsPanel />}
+      {tab === 'clients' && <UsersPanel role="client" />}
+      {tab === 'agents' && <UsersPanel role="agent" />}
 
       {serviceModal && (
         <ServiceFormModal

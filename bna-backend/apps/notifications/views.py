@@ -37,7 +37,7 @@ class NotificationListView(APIView):
 
 class NotificationMarkReadView(APIView):
     """
-    POST /api/notifications/{id}/read/ — mark as DELIVERED (= read).
+    POST /api/notifications/{id}/read/ — stamp `read_at`.
     Only the recipient can mark their own notifications.
     """
     permission_classes = [IsGuest]
@@ -52,25 +52,20 @@ class NotificationMarkReadView(APIView):
                 'Vous ne pouvez marquer que vos propres notifications.'
             )
 
-        NotificationAccess.mark_delivered(notification_id=notification_id)
+        NotificationAccess.mark_read(notification_id=notification_id)
 
         return no_content()
 
 
 class UnreadCountView(APIView):
-    """GET /api/notifications/unread-count/ — QUEUED IN_APP count for the badge."""
+    """GET /api/notifications/unread-count/ — IN_APP count where read_at IS NULL."""
     permission_classes = [IsGuest]
 
     def get(self, request):
-        notifications = NotificationAccess.get_recipient_notifications(
+        unread = Notification.objects.filter(
             recipient_id=request.user.pk,
-            limit=50,
-        )
-
-        unread = sum(
-            1 for n in notifications
-            if n.status == Notification.Status.QUEUED
-            and n.channel == Notification.Channel.IN_APP
-        )
+            channel=Notification.Channel.IN_APP,
+            read_at__isnull=True,
+        ).count()
 
         return success({'unread_count': unread})

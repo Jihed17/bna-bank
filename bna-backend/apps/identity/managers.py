@@ -6,7 +6,13 @@ from django.db import transaction
 
 from apps.identity.access import UserAccess
 from apps.identity.models import User
-from core.events import AccountVerifiedEvent, PasswordResetRequestedEvent
+from core.events import (
+    AccountVerifiedEvent,
+    EmailVerificationRequestedEvent,
+    LoginNewDeviceEvent,
+    PasswordChangedEvent,
+    PasswordResetRequestedEvent,
+)
 from core.exceptions import InvalidCredentials, UserNotFound
 from core.logging import AuditMixin, get_logger
 from core.publisher import now_iso, publish
@@ -36,6 +42,8 @@ class IdentityManager(AuditMixin):
         last_name: str,
         phone: str = '',
         preferred_language: str = 'fr',
+        gender: str = '',
+        identity_image=None,
     ) -> User:
         """
         Register a new user and immediately promote them to CLIENT.
@@ -52,6 +60,8 @@ class IdentityManager(AuditMixin):
             last_name=last_name,
             phone=phone,
             preferred_language=preferred_language,
+            gender=gender,
+            identity_image=identity_image,
         )
 
         logger.info(
@@ -89,17 +99,53 @@ class IdentityManager(AuditMixin):
         return user
 
     @staticmethod
-    def authenticate(*, email: str, password: str) -> dict:
+    def authenticate(
+        *,
+        email: str,
+        password: str,
+        request_ip: str = '',
+        request_user_agent: str = '',
+    ) -> dict:
         """
         Validate credentials and issue JWT tokens.
 
         Returns a dict with 'user', 'access', 'refresh'. Role, status,
         email, and full_name claims are embedded in the token payload
         (matching BNATokenObtainPairSerializer from Phase 3).
+
+        Side effects:
+          - On successful login, persist last_login_ip / last_login_user_agent.
+          - If those values were already set AND differ from this request,
+            publish LoginNewDeviceEvent (security alert email).
         """
         from rest_framework_simplejwt.tokens import RefreshToken
 
         user = UserAccess.authenticate(email=email, password=password)
+
+        prior_ip = user.last_login_ip or ''
+        prior_ua = user.last_login_user_agent or ''
+        is_known_device = bool(prior_ip) and (
+            prior_ip == request_ip and prior_ua == request_user_agent
+        )
+
+        if (prior_ip or prior_ua) and not is_known_device:
+            publish(LoginNewDeviceEvent(
+                occurred_at=now_iso(),
+                user_id=user.pk,
+                email=user.email,
+                ip_address=request_ip or 'inconnue',
+                user_agent=request_user_agent or 'inconnu',
+            ))
+
+        if request_ip or request_user_agent:
+            user.last_login_ip = request_ip or user.last_login_ip
+            user.last_login_user_agent = (
+                request_user_agent[:512] if request_user_agent
+                else user.last_login_user_agent
+            )
+            user.save(update_fields=[
+                'last_login_ip', 'last_login_user_agent', 'updated_at',
+            ])
 
         refresh = RefreshToken.for_user(user)
         refresh['role'] = user.role
@@ -242,6 +288,19 @@ class IdentityManager(AuditMixin):
             target_id=user_id,
         )
 
+        try:
+            user = UserAccess.get_profile(user_id=user_id)
+            publish(PasswordChangedEvent(
+                occurred_at=now_iso(),
+                user_id=user.pk,
+                email=user.email,
+            ))
+        except Exception as exc:
+            logger.warning(
+                'password_changed_event_publish_failed',
+                extra={'user_id': user_id, 'error': str(exc)},
+            )
+
         logger.info('password_changed', extra={'user_id': user_id})
 
     @staticmethod
@@ -286,6 +345,8 @@ class IdentityManager(AuditMixin):
         last_name: str,
         phone: str = '',
         preferred_language: str = 'fr',
+        gender: str = '',
+        identity_image=None,
     ) -> User:
         """
         Public registration variant — creates a GUEST in PENDING status
@@ -303,18 +364,65 @@ class IdentityManager(AuditMixin):
             last_name=last_name,
             phone=phone,
             preferred_language=preferred_language,
+            gender=gender,
+            identity_image=identity_image,
         )
 
         IdentityManager._audit(
-            action='guest_registered_pending_approval',
+            action='guest_registered_pending_email_verification',
             actor_id=user.pk,
             target_id=user.pk,
         )
+
+        token = UserAccess.store_email_verification_token(user_id=user.pk)
+        verification_url = f'{settings.FRONTEND_URL}/verify-email?token={token}'
+
+        publish(EmailVerificationRequestedEvent(
+            occurred_at=now_iso(),
+            user_id=user.pk,
+            email=user.email,
+            full_name=user.get_full_name(),
+            verification_token=token,
+            verification_url=verification_url,
+        ))
+
         logger.info(
-            'guest_registered_pending',
+            'guest_registered_pending_email_verification',
             extra={'user_id': user.pk, 'email': email},
         )
         return user
+
+    @staticmethod
+    def verify_email(*, token: str) -> User:
+        """
+        Consume an email-verification token and promote the GUEST account
+        to CLIENT/ACTIVE. Used by the public /verify-email endpoint —
+        replaces the admin approval step.
+
+        Raises InvalidCredentials if the token is missing, expired, or used.
+        """
+        user = UserAccess.consume_email_verification_token(token=token)
+
+        if user is None:
+            raise InvalidCredentials(
+                'Ce lien de vérification est invalide ou expiré. '
+                'Veuillez demander un nouveau lien.'
+            )
+
+        promoted = IdentityManager.promote_to_client(user_id=user.pk)
+
+        IdentityManager._audit(
+            action='email_verified',
+            actor_id=user.pk,
+            target_id=user.pk,
+        )
+
+        logger.info(
+            'email_verified',
+            extra={'user_id': user.pk, 'email': user.email},
+        )
+
+        return promoted
 
     @staticmethod
     def get_pending_guests() -> list[User]:
@@ -380,11 +488,18 @@ class IdentityManager(AuditMixin):
         return user
 
     @staticmethod
-    def delete_user(*, user_id: int, admin_id: int) -> None:
+    def delete_user(*, user_id: int, admin_id: int) -> dict:
         """
-        Admin hard-deletes a user (typically a rejected guest with no history).
-        Raises CannotDelete if FKs prevent deletion.
+        Admin removes a user. Tries hard delete first (clean removal for
+        guests with no history); on PROTECT failure, automatically falls
+        back to archiving (status=CLOSED) so the action always succeeds
+        and login is blocked either way.
+
+        Returns a dict {'mode': 'deleted'|'archived'} so the API can
+        surface what actually happened to the admin.
         """
+        from core.exceptions import CannotDelete
+
         admin = UserAccess.get_profile(user_id=admin_id)
         if admin.role != User.Role.ADMIN:
             raise PermissionError(
@@ -396,17 +511,73 @@ class IdentityManager(AuditMixin):
                 "Vous ne pouvez pas supprimer votre propre compte administrateur."
             )
 
-        UserAccess.delete_user(user_id=user_id)
+        try:
+            UserAccess.delete_user(user_id=user_id)
+            mode = 'deleted'
+        except CannotDelete:
+            UserAccess.archive_user(user_id=user_id)
+            mode = 'archived'
 
         IdentityManager._audit(
-            action='user_deleted',
+            action=f'user_{mode}',
             actor_id=admin_id,
             target_id=user_id,
         )
         logger.info(
-            'user_deleted',
+            f'user_{mode}',
             extra={'user_id': user_id, 'by': admin_id},
         )
+
+        return {'mode': mode}
+
+    @staticmethod
+    def archive_user(*, user_id: int, admin_id: int) -> User:
+        """Force-archive a user (status=CLOSED) regardless of FKs.
+        Always blocks login. Use suspend_account when you want a
+        temporary block instead."""
+        admin = UserAccess.get_profile(user_id=admin_id)
+        if admin.role != User.Role.ADMIN:
+            raise PermissionError(
+                "Seul un administrateur peut archiver un compte."
+            )
+        if user_id == admin_id:
+            raise PermissionError(
+                "Vous ne pouvez pas archiver votre propre compte administrateur."
+            )
+
+        user = UserAccess.archive_user(user_id=user_id)
+
+        IdentityManager._audit(
+            action='user_archived',
+            actor_id=admin_id,
+            target_id=user_id,
+        )
+        logger.info('user_archived', extra={'user_id': user_id, 'by': admin_id})
+
+        return user
+
+    @staticmethod
+    def reactivate_account(*, user_id: int, admin_id: int) -> User:
+        """Restore a SUSPENDED or CLOSED account to ACTIVE."""
+        admin = UserAccess.get_profile(user_id=admin_id)
+        if admin.role != User.Role.ADMIN:
+            raise PermissionError(
+                "Seul un administrateur peut réactiver un compte."
+            )
+
+        user = UserAccess.reactivate_account(user_id=user_id)
+
+        IdentityManager._audit(
+            action='account_reactivated',
+            actor_id=admin_id,
+            target_id=user_id,
+        )
+        logger.info(
+            'account_reactivated',
+            extra={'user_id': user_id, 'by': admin_id},
+        )
+
+        return user
 
     @staticmethod
     def suspend_account(*, user_id: int, admin_id: int) -> User:

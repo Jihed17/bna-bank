@@ -111,10 +111,25 @@ export const identityApi = createApi({
       }),
     }),
 
+    verifyEmail: builder.mutation({
+      query: (body) => ({
+        url: '/identity/verify-email/',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response) => response.data,
+    }),
+
     // ── Admin endpoints ────────────────────────────────────────────────────
 
     getAgents: builder.query({
       query: () => '/identity/users/?role=agent',
+      transformResponse: (response) => response.data,
+      providesTags: ['User'],
+    }),
+
+    getUsers: builder.query({
+      query: (params = {}) => ({ url: '/identity/users/', params }),
       transformResponse: (response) => response.data,
       providesTags: ['User'],
     }),
@@ -180,6 +195,24 @@ export const identityApi = createApi({
         { type: 'User', id: userId },
       ],
     }),
+
+    archiveAccount: builder.mutation({
+      query: (userId) => ({
+        url: `/identity/users/${userId}/archive/`,
+        method: 'POST',
+      }),
+      transformResponse: (response) => response.data,
+      invalidatesTags: ['User'],
+    }),
+
+    reactivateAccount: builder.mutation({
+      query: (userId) => ({
+        url: `/identity/users/${userId}/reactivate/`,
+        method: 'POST',
+      }),
+      transformResponse: (response) => response.data,
+      invalidatesTags: ['User'],
+    }),
   }),
 })
 
@@ -192,7 +225,9 @@ export const {
   useChangePasswordMutation,
   useRequestPasswordResetMutation,
   useConfirmPasswordResetMutation,
+  useVerifyEmailMutation,
   useGetAgentsQuery,
+  useGetUsersQuery,
   useGetPendingGuestsQuery,
   useApproveGuestMutation,
   useRejectGuestMutation,
@@ -200,4 +235,6 @@ export const {
   useGetUserAdminQuery,
   useAssignRoleMutation,
   useSuspendAccountMutation,
+  useArchiveAccountMutation,
+  useReactivateAccountMutation,
 } = identityApi

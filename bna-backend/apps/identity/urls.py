@@ -2,8 +2,10 @@ from django.urls import path
 
 from apps.identity.views import (
     ApproveGuestView,
+    ArchiveUserView,
     AssignRoleView,
     DeleteUserView,
+    EmailVerifyView,
     LoginView,
     LogoutView,
     PasswordChangeView,
@@ -11,6 +13,7 @@ from apps.identity.views import (
     PasswordResetRequestView,
     PendingGuestsView,
     ProfileView,
+    ReactivateAccountView,
     RegisterView,
     RejectGuestView,
     SuspendAccountView,
@@ -21,6 +24,7 @@ from apps.identity.views import (
 urlpatterns = [
     # Public auth
     path('register/', RegisterView.as_view(), name='identity-register'),
+    path('verify-email/', EmailVerifyView.as_view(), name='identity-verify-email'),
     path('login/', LoginView.as_view(), name='identity-login'),
     path('logout/', LogoutView.as_view(), name='identity-logout'),
 
@@ -43,4 +47,6 @@ urlpatterns = [
     path('users/<int:user_id>/approve/', ApproveGuestView.as_view(), name='identity-approve'),
     path('users/<int:user_id>/reject/', RejectGuestView.as_view(), name='identity-reject'),
     path('users/<int:user_id>/delete/', DeleteUserView.as_view(), name='identity-delete-user'),
+    path('users/<int:user_id>/archive/', ArchiveUserView.as_view(), name='identity-archive-user'),
+    path('users/<int:user_id>/reactivate/', ReactivateAccountView.as_view(), name='identity-reactivate-user'),
 ]

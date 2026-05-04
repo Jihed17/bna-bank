@@ -111,7 +111,7 @@ def assignment(db, agent_user, agency_service):
 def future_slot():
     now = timezone.now()
     candidate = now + timedelta(days=5)
-    while candidate.weekday() == 6:
+    while candidate.weekday() >= 5:  # skip Saturday (5) and Sunday (6)
         candidate += timedelta(days=1)
     return candidate.replace(hour=10, minute=0, second=0, microsecond=0)
 

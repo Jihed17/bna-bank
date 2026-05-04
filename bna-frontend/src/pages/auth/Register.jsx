@@ -11,8 +11,8 @@ import { useRegisterMutation } from '../../store/services/identityApi'
  *   2. NO auto-login (the new account is not yet ACTIVE)
  *   3. Show success screen explaining the next step
  *
- * The login page will refuse the credentials with "compte non actif" until
- * an admin approves the registration via the AdminDashboard pending tab.
+ * The form is sent as multipart/form-data when an identity image is
+ * provided so the file goes through the same request as the rest.
  */
 export default function Register() {
   const navigate = useNavigate()
@@ -24,7 +24,9 @@ export default function Register() {
     first_name: '',
     last_name: '',
     phone: '',
+    gender: '',
   })
+  const [identityImage, setIdentityImage] = useState(null)
   const [submitted, setSubmitted] = useState(false)
 
   const handleChange = (e) =>
@@ -33,7 +35,16 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    const result = await register(form)
+    // Always use FormData when an image is attached. For pure-text we
+    // could send JSON, but FormData works just as well and keeps a
+    // single code path.
+    const payload = new FormData()
+    Object.entries(form).forEach(([k, v]) => {
+      if (v !== '' && v !== null && v !== undefined) payload.append(k, v)
+    })
+    if (identityImage) payload.append('identity_image', identityImage)
+
+    const result = await register(payload)
     if (result.error) {
       toast.error(extractError(result.error))
       return
@@ -80,13 +91,16 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
-      <div className="max-w-md w-full space-y-8">
-        <h2 className="text-center text-3xl font-extrabold text-gray-900">
-          Créer un compte
-        </h2>
-        <p className="text-center text-sm text-gray-500 -mt-4">
-          Votre demande sera examinée par un administrateur.
-        </p>
+      <div className="max-w-md w-full space-y-6">
+        <div className="text-center">
+          <h2 className="text-3xl font-extrabold text-gray-900">
+            Créer un compte
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Votre demande sera examinée par un administrateur.
+          </p>
+        </div>
+
         <form className="space-y-4" onSubmit={handleSubmit}>
           {[
             { name: 'first_name', label: 'Prénom', type: 'text' },
@@ -110,6 +124,59 @@ export default function Register() {
               />
             </div>
           ))}
+
+          {/* Gender — radio for clarity (only 2 options) */}
+          <div>
+            <span className="block text-sm font-medium text-gray-700 mb-1">
+              Civilité
+            </span>
+            <div className="flex gap-4">
+              {[
+                { value: 'male',   label: 'Homme' },
+                { value: 'female', label: 'Femme' },
+              ].map(({ value, label }) => (
+                <label
+                  key={value}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 border rounded-md cursor-pointer transition-colors
+                    ${form.gender === value
+                      ? 'border-bna-primary bg-bna-light text-bna-primary'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                >
+                  <input
+                    type="radio"
+                    name="gender"
+                    value={value}
+                    checked={form.gender === value}
+                    onChange={handleChange}
+                    className="hidden"
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Identity document */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Pièce d'identité <span className="text-gray-400 font-normal">(optionnel)</span>
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setIdentityImage(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-bna-light file:text-bna-primary hover:file:bg-bna-primary/10"
+            />
+            {identityImage && (
+              <p className="mt-1 text-xs text-gray-500">
+                Sélectionné : {identityImage.name}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-gray-400">
+              Photo de votre CIN ou passeport — accélère la validation par l'admin.
+            </p>
+          </div>
+
           <button
             type="submit"
             disabled={isLoading}

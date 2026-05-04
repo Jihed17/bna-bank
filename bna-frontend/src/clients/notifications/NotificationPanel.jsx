@@ -99,7 +99,7 @@ export default function NotificationPanel() {
               </div>
             ) : (
               notifications.map((notif) => {
-                const unread = notif.status === 'queued'
+                const unread = notif.read_at == null
                 // mark as new when arriving after last panel-open
                 const _new = isNew(notif)
                 return (

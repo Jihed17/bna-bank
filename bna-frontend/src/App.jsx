@@ -6,6 +6,7 @@ import { HelmetProvider } from 'react-helmet-async'
 import NotificationToastDispatcher from './clients/notifications/NotificationToastDispatcher'
 import Footer from './components/layout/Footer'
 import Navbar from './components/layout/Navbar'
+import WelcomeGate from './components/WelcomeGate'
 import { LanguageProvider } from './contexts/LanguageContext'
 import AdminDashboard from './pages/AdminDashboard'
 import AgentDashboard from './pages/AgentDashboard'
@@ -17,11 +18,14 @@ import Appointments from './pages/Appointments'
 import Assistant from './pages/Assistant'
 import Dashboard from './pages/Dashboard'
 import Home from './pages/Home'
+import ForgotPassword from './pages/auth/ForgotPassword'
 import Login from './pages/auth/Login'
 import NotFound from './pages/NotFound'
 import Notifications from './pages/Notifications'
 import Profile from './pages/Profile'
 import Register from './pages/auth/Register'
+import ResetPassword from './pages/auth/ResetPassword'
+import VerifyEmail from './pages/auth/VerifyEmail'
 import ServiceDetail from './pages/ServiceDetail'
 import Services from './pages/Services'
 import Support from './pages/Support'
@@ -85,6 +89,9 @@ function AppContent() {
           {/* Auth routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
 
           {/* Protected routes */}
           <Route
@@ -184,6 +191,7 @@ function AppContent() {
       />
 
       <NotificationToastDispatcher />
+      <WelcomeGate />
     </div>
   )
 }

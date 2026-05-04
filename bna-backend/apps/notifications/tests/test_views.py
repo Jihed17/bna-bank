@@ -129,8 +129,7 @@ class TestMarkReadView:
         assert response.status_code == 204
 
         notification.refresh_from_db()
-        assert notification.status == Notification.Status.DELIVERED
-        assert notification.delivered_at is not None
+        assert notification.read_at is not None
 
     def test_cannot_mark_others_notification_as_read(
         self, auth_api, other_user,

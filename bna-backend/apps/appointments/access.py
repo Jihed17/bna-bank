@@ -319,16 +319,20 @@ class AppointmentAccess(AuditMixin):
     @staticmethod
     def get_pending_for_service_agency(
         *,
-        service_id: int,
-        agency_id: int,
+        service_id: int | None = None,
+        agency_id: int | None = None,
     ) -> list[Appointment]:
+        """Return all PENDING appointments, optionally filtered by service
+        and/or agency. Both filters are optional: pass `agency_id` only
+        to scope to one agency, pass both to refine further, pass nothing
+        to list all pending across the system (admin use)."""
+        qs = Appointment.objects.filter(status=Appointment.Status.PENDING)
+        if service_id is not None:
+            qs = qs.filter(service_id=service_id)
+        if agency_id is not None:
+            qs = qs.filter(agency_id=agency_id)
         return list(
-            Appointment.objects.filter(
-                service_id=service_id,
-                agency_id=agency_id,
-                status=Appointment.Status.PENDING,
-            )
-            .select_related('client', 'service', 'agency')
+            qs.select_related('client', 'service', 'agency')
             .order_by('scheduled_at')
         )
 

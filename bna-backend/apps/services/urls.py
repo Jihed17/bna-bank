@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.services.views import (
+    AgencyCitiesView,
     AgencyCloseView,
     AgencyCreateView,
     AgencyDetailView,
@@ -26,6 +27,7 @@ urlpatterns = [
 
     # Public agency catalog (must precede <int:service_id>/ so 'agencies' is not misrouted)
     path('agencies/', AgencyListView.as_view(), name='agency-list'),
+    path('agencies/cities/', AgencyCitiesView.as_view(), name='agency-cities'),
     path('agencies/create/', AgencyCreateView.as_view(), name='agency-create'),
     path('agencies/<int:agency_id>/', AgencyDetailView.as_view(), name='agency-detail'),
     path('agencies/<int:agency_id>/update/', AgencyUpdateView.as_view(), name='agency-update'),

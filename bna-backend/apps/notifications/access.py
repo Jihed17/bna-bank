@@ -90,6 +90,24 @@ class NotificationAccess(AuditMixin):
         return notification
 
     @staticmethod
+    def mark_read(*, notification_id: int) -> Notification:
+        """
+        Stamp `read_at` to mark the notification as seen by the recipient.
+        Idempotent — re-reading does not update the timestamp.
+        """
+        with transaction.atomic():
+            try:
+                notification = Notification.objects.select_for_update().get(pk=notification_id)
+            except Notification.DoesNotExist:
+                raise NotificationNotFound()
+
+            if notification.read_at is None:
+                notification.read_at = timezone.now()
+                notification.save(update_fields=['read_at', 'updated_at'])
+
+        return notification
+
+    @staticmethod
     def mark_failed(
         *,
         notification_id: int,

@@ -16,7 +16,7 @@ class NotificationOutputSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'payload',
             'appointment_id',
-            'sent_at', 'delivered_at',
+            'sent_at', 'delivered_at', 'read_at',
             'created_at',
         ]
         read_only_fields = fields

@@ -28,6 +28,11 @@ class Notification(models.Model):
         SERVICE_UPDATED = 'service_updated', 'Service mis à jour'
         ACCOUNT_VERIFIED = 'account_verified', 'Compte vérifié'
         PASSWORD_RESET = 'password_reset', 'Réinitialisation du mot de passe'
+        REGISTRATION_SUBMITTED = 'registration_submitted', 'Inscription en attente d\'examen'
+        REGISTRATION_PENDING_ADMIN = 'registration_pending_admin', 'Nouvelle inscription à examiner'
+        EMAIL_VERIFICATION = 'email_verification', 'Vérification de l\'adresse email'
+        PASSWORD_CHANGED = 'password_changed', 'Mot de passe modifié'
+        LOGIN_NEW_DEVICE = 'login_new_device', 'Connexion depuis un nouvel appareil'
 
     recipient = models.ForeignKey(
         User,
@@ -49,6 +54,9 @@ class Notification(models.Model):
 
     sent_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
+    # When the recipient actually saw the notification in the UI.
+    # Distinct from delivered_at, which records channel-side delivery.
+    read_at = models.DateTimeField(null=True, blank=True)
     failure_reason = models.TextField(blank=True, default='')
     retry_count = models.PositiveSmallIntegerField(default=0)
     max_retries = models.PositiveSmallIntegerField(default=3)

@@ -8,3 +8,6 @@ celery==5.3.*
 redis==5.0.*
 Pillow==10.*
 django-filter==23.*
+google-auth==2.*
+google-auth-oauthlib==1.*
+google-api-python-client==2.*

@@ -43,15 +43,27 @@ class ServiceDetailView(APIView):
 
 
 class AgencyListView(APIView):
-    """GET /api/services/agencies/ — list agencies (public)."""
+    """GET /api/services/agencies/ — list agencies (public).
+
+    Filters: ?status=open · ?service_id=N · ?city=Tunis (case-insensitive).
+    """
     permission_classes = [AllowAny]
 
     def get(self, request):
         agencies = ServiceManager.get_agencies(
             status=request.query_params.get('status'),
             service_id=request.query_params.get('service_id'),
+            city=request.query_params.get('city'),
         )
         return success(AgencyOutputSerializer(agencies, many=True).data)
+
+
+class AgencyCitiesView(APIView):
+    """GET /api/services/agencies/cities/ — distinct list of cities."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return success(ServiceManager.get_agency_cities())
 
 
 class AgencyDetailView(APIView):

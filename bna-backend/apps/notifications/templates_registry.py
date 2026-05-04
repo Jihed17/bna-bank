@@ -136,6 +136,73 @@ TEMPLATES: dict = {
         ),
         'short': 'Lien de réinitialisation : {reset_url}',
     },
+
+    Notification.EventType.EMAIL_VERIFICATION: {
+        'subject': 'Confirmez votre adresse email — BNA Digital',
+        'body': (
+            'Bonjour {full_name},\n\n'
+            'Bienvenue sur BNA Digital. Pour activer votre compte, '
+            'cliquez sur le lien ci-dessous :\n\n'
+            '{verification_url}\n\n'
+            'Ce lien expire dans 24 heures.\n'
+            "Si vous n'êtes pas à l'origine de cette inscription, ignorez ce message.\n\n"
+            'BNA Digital'
+        ),
+        'short': 'Confirmez votre email BNA Digital : {verification_url}',
+    },
+
+    Notification.EventType.REGISTRATION_SUBMITTED: {
+        'subject': 'Votre demande d\'inscription BNA Digital est en cours d\'examen',
+        'body': (
+            'Bonjour {full_name},\n\n'
+            'Nous avons bien reçu votre demande d\'inscription sur BNA Digital.\n\n'
+            'Un administrateur va examiner votre dossier sous peu. Vous recevrez '
+            'un email dès que votre compte sera activé.\n\n'
+            'BNA Digital'
+        ),
+        'short': 'Inscription BNA Digital reçue — examen en cours.',
+    },
+
+    Notification.EventType.REGISTRATION_PENDING_ADMIN: {
+        'subject': 'Nouvelle inscription à examiner — {full_name}',
+        'body': (
+            'Bonjour,\n\n'
+            'Une nouvelle inscription est en attente d\'approbation.\n\n'
+            'Nom    : {full_name}\n'
+            'Email  : {email}\n\n'
+            'Connectez-vous à l\'espace administrateur pour valider ou refuser '
+            'cette demande.\n\n'
+            'BNA Digital'
+        ),
+        'short': 'Nouvelle inscription : {full_name} ({email}).',
+    },
+
+    Notification.EventType.PASSWORD_CHANGED: {
+        'subject': 'Votre mot de passe BNA Digital a été modifié',
+        'body': (
+            'Bonjour,\n\n'
+            'Votre mot de passe a été modifié avec succès.\n\n'
+            "Si vous n'êtes pas à l'origine de cette modification, contactez "
+            'immédiatement votre agence BNA et réinitialisez votre mot de passe.\n\n'
+            'BNA Digital'
+        ),
+        'short': 'Mot de passe BNA modifié. Pas vous ? Contactez votre agence.',
+    },
+
+    Notification.EventType.LOGIN_NEW_DEVICE: {
+        'subject': 'Nouvelle connexion à votre compte BNA Digital',
+        'body': (
+            'Bonjour,\n\n'
+            'Une connexion a été détectée depuis un nouvel appareil.\n\n'
+            'Adresse IP   : {ip_address}\n'
+            'Navigateur   : {user_agent}\n\n'
+            "Si vous reconnaissez cette connexion, aucune action n'est requise.\n"
+            "Sinon, changez votre mot de passe immédiatement et contactez votre "
+            'agence BNA.\n\n'
+            'BNA Digital'
+        ),
+        'short': 'Nouvelle connexion BNA depuis {ip_address}. Pas vous ? Changez votre mdp.',
+    },
 }
 
 

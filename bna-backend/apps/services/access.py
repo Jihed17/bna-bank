@@ -301,11 +301,26 @@ class AgencyAccess:
             raise AgencyNotFound()
 
     @staticmethod
-    def get_all_agencies(*, status: str | None = None) -> list[Agency]:
+    def get_all_agencies(
+        *,
+        status: str | None = None,
+        city: str | None = None,
+    ) -> list[Agency]:
         qs = Agency.objects.all().order_by('city', 'name')
         if status:
             qs = qs.filter(status=status)
+        if city:
+            qs = qs.filter(city__iexact=city.strip())
         return list(qs)
+
+    @staticmethod
+    def get_agency_cities() -> list[str]:
+        """Return the distinct list of cities an agency exists in."""
+        return list(
+            Agency.objects.order_by('city')
+            .values_list('city', flat=True)
+            .distinct()
+        )
 
     @staticmethod
     def configure_agency_service_hours(

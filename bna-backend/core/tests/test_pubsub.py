@@ -60,18 +60,30 @@ class TestEventSchema:
 
 
 class TestPublisher:
+    """
+    publish() looks up the registered Task by name and calls apply_async()
+    on it (so CELERY_TASK_ALWAYS_EAGER is honoured in dev/test). If the task
+    is not registered, it falls back to celery_app.send_task. These tests
+    patch apply_async on the registered Task so eager mode does not actually
+    execute the listener while we inspect the dispatch arguments.
+    """
+
+    @staticmethod
+    def _patch_task(task_name):
+        from celery import current_app
+        task = current_app.tasks[task_name]
+        return patch.object(task, 'apply_async')
 
     def test_publish_sends_correct_task_name(self):
         event = AppointmentRequestedEvent(
             occurred_at=now_iso(),
             appointment_id=1,
         )
-        with patch('core.publisher.celery_app.send_task') as mock_send:
+        task_name = 'apps.notifications.tasks.handle_appointment_requested'
+        with self._patch_task(task_name) as mock_apply:
             publish(event)
 
-        mock_send.assert_called_once()
-        task_name = mock_send.call_args[0][0]
-        assert task_name == 'apps.notifications.tasks.handle_appointment_requested'
+        mock_apply.assert_called_once()
 
     def test_publish_passes_payload_as_kwarg(self):
         event = AppointmentAssignedEvent(
@@ -81,10 +93,11 @@ class TestPublisher:
             client_id=3,
             agent_id=5,
         )
-        with patch('core.publisher.celery_app.send_task') as mock_send:
+        task_name = 'apps.notifications.tasks.handle_appointment_assigned'
+        with self._patch_task(task_name) as mock_apply:
             publish(event)
 
-        kwargs = mock_send.call_args[1]['kwargs']
+        kwargs = mock_apply.call_args[1]['kwargs']
         assert 'payload' in kwargs
         assert kwargs['payload']['appointment_id'] == 7
         assert kwargs['payload']['appointment_ref'] == 'BNA-2024-00007'
@@ -97,11 +110,39 @@ class TestPublisher:
             change_type='suspended',
             changed_by_id=99,
         )
-        with patch('core.publisher.celery_app.send_task') as mock_send:
+        task_name = 'apps.notifications.tasks.handle_service_updated'
+        with self._patch_task(task_name) as mock_apply:
             publish(event)
 
-        queue = mock_send.call_args[1]['queue']
+        queue = mock_apply.call_args[1]['queue']
         assert queue == 'notifications'
+
+    def test_publish_falls_back_to_send_task_if_not_registered(self):
+        """If the listener is not registered (e.g. notifications app
+        disabled), publish() falls through to send_task so the message
+        still hits the broker."""
+        event = AppointmentRequestedEvent(
+            occurred_at=now_iso(),
+            appointment_id=1,
+        )
+        with patch('core.publisher.celery_app.tasks', {}):
+            with patch('core.publisher.celery_app.send_task') as mock_send:
+                publish(event)
+
+        mock_send.assert_called_once()
+        assert mock_send.call_args[0][0] == 'apps.notifications.tasks.handle_appointment_requested'
+
+    def test_publish_swallows_broker_failures(self):
+        """Broker outage must not break the business operation that
+        triggered the event."""
+        event = AppointmentRequestedEvent(
+            occurred_at=now_iso(),
+            appointment_id=1,
+        )
+        task_name = 'apps.notifications.tasks.handle_appointment_requested'
+        with self._patch_task(task_name) as mock_apply:
+            mock_apply.side_effect = ConnectionRefusedError('Redis down')
+            publish(event)  # should NOT raise
 
 
 @pytest.mark.django_db
