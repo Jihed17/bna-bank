@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
@@ -27,7 +27,20 @@ export default function Register() {
     gender: '',
   })
   const [identityImage, setIdentityImage] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
   const [submitted, setSubmitted] = useState(false)
+  const fileInputRef = useRef(null)
+
+  // Build / revoke object URL for the live preview of the picked file.
+  useEffect(() => {
+    if (!identityImage) {
+      setImagePreview(null)
+      return
+    }
+    const url = URL.createObjectURL(identityImage)
+    setImagePreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [identityImage])
 
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }))
@@ -50,7 +63,7 @@ export default function Register() {
       return
     }
 
-    toast.success('Compte créé. En attente de validation.')
+    toast.success('Compte créé. Vérifiez votre email.')
     setSubmitted(true)
   }
 
@@ -60,11 +73,11 @@ export default function Register() {
         <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
           <div className="text-5xl mb-4">📧</div>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            Compte créé !
+            Vérifiez votre email
           </h2>
           <p className="text-gray-600 mb-6 leading-relaxed">
-            Votre demande d'inscription a été envoyée à un administrateur BNA.
-            Vous recevrez un email dès que votre compte sera activé.
+            Nous venons de vous envoyer un lien de vérification à l'adresse
+            que vous avez indiquée. Cliquez dessus pour activer votre compte.
           </p>
           <p className="text-sm text-gray-400 mb-6">
             En attendant, vous pouvez parcourir les services et agences sans
@@ -97,7 +110,42 @@ export default function Register() {
             Créer un compte
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Votre demande sera examinée par un administrateur.
+            Une vérification par email finalisera l'inscription.
+          </p>
+        </div>
+
+        {/* Big centered round photo uploader */}
+        <div className="flex flex-col items-center">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="relative w-32 h-32 rounded-full border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-bna-primary overflow-hidden transition-colors"
+            aria-label="Choisir une photo de profil"
+          >
+            {imagePreview ? (
+              <img
+                src={imagePreview}
+                alt="Aperçu"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                <span className="text-3xl">📷</span>
+                <span className="text-xs mt-1">Photo</span>
+              </div>
+            )}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => setIdentityImage(e.target.files?.[0] || null)}
+            className="hidden"
+          />
+          <p className="mt-2 text-xs text-gray-500">
+            {imagePreview
+              ? 'Cliquez pour changer'
+              : 'Cliquez pour ajouter une photo (optionnel)'}
           </p>
         </div>
 
@@ -154,27 +202,6 @@ export default function Register() {
                 </label>
               ))}
             </div>
-          </div>
-
-          {/* Identity document */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Pièce d'identité <span className="text-gray-400 font-normal">(optionnel)</span>
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setIdentityImage(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-bna-light file:text-bna-primary hover:file:bg-bna-primary/10"
-            />
-            {identityImage && (
-              <p className="mt-1 text-xs text-gray-500">
-                Sélectionné : {identityImage.name}
-              </p>
-            )}
-            <p className="mt-1 text-xs text-gray-400">
-              Photo de votre CIN ou passeport — accélère la validation par l'admin.
-            </p>
           </div>
 
           <button

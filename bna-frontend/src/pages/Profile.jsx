@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { extractError } from '../store/api/baseApi'
@@ -20,10 +20,25 @@ export default function Profile() {
     gender: '',
   })
   const [identityImage, setIdentityImage] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const fileInputRef = useRef(null)
   const [pwForm, setPwForm] = useState({
     current_password: '',
     new_password: '',
   })
+
+  // Local preview while a new file is picked but not yet uploaded.
+  useEffect(() => {
+    if (!identityImage) {
+      setImagePreview(null)
+      return
+    }
+    const url = URL.createObjectURL(identityImage)
+    setImagePreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [identityImage])
+
+  const displayedAvatar = imagePreview || user?.identity_image_url || null
 
   useEffect(() => {
     if (user) {
@@ -83,6 +98,48 @@ export default function Profile() {
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Mon profil</h1>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+        {/* Avatar header */}
+        <div className="flex flex-col items-center mb-6">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="relative w-32 h-32 rounded-full border-2 border-gray-200 bg-gray-50 hover:border-bna-primary overflow-hidden transition-colors group"
+            aria-label="Modifier la photo de profil"
+          >
+            {displayedAvatar ? (
+              <img
+                src={displayedAvatar}
+                alt="Photo de profil"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                <span className="text-3xl">👤</span>
+                <span className="text-xs mt-1">Photo</span>
+              </div>
+            )}
+            <span className="absolute inset-x-0 bottom-0 py-1 text-[10px] font-medium uppercase tracking-wide text-white bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+              Modifier
+            </span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => setIdentityImage(e.target.files?.[0] || null)}
+            className="hidden"
+          />
+          <p className="mt-3 font-semibold text-gray-900">
+            {user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.email}
+          </p>
+          <p className="text-xs text-gray-500">{user?.role_display}</p>
+          {imagePreview && (
+            <p className="mt-2 text-xs text-bna-primary">
+              Nouvelle photo sélectionnée — cliquez sur "Enregistrer" pour confirmer.
+            </p>
+          )}
+        </div>
+
         <div className="mb-4">
           <p className="text-sm text-gray-500">Email</p>
           <p className="font-medium text-gray-900">{user?.email}</p>
@@ -158,47 +215,6 @@ export default function Profile() {
                 </label>
               ))}
             </div>
-          </div>
-
-          {/* Identity document */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Pièce d'identité
-            </label>
-            {user?.identity_image_url ? (
-              <div className="mb-2 flex items-center gap-3">
-                <a
-                  href={user.identity_image_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <img
-                    src={user.identity_image_url}
-                    alt="Pièce d'identité"
-                    className="w-24 h-16 object-cover rounded border border-gray-200"
-                  />
-                </a>
-                <span className="text-xs text-gray-500">
-                  Document enregistré — choisissez un fichier pour le remplacer.
-                </span>
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 mb-2">
-                Aucune pièce d'identité enregistrée pour le moment.
-              </p>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setIdentityImage(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-bna-light file:text-bna-primary hover:file:bg-bna-primary/10"
-            />
-            {identityImage && (
-              <p className="mt-1 text-xs text-gray-500">
-                Sélectionné : {identityImage.name}
-              </p>
-            )}
           </div>
 
           <button

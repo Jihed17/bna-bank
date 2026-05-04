@@ -76,8 +76,22 @@ export default function Navbar() {
                 <NotificationBell />
                 <NotificationPanel />
               </div>
-              <Link to="/profile" className="text-gray-600 hover:text-bna-primary text-sm">
-                {user?.first_name || 'Profil'}
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 text-gray-600 hover:text-bna-primary text-sm"
+              >
+                {user?.identity_image_url ? (
+                  <img
+                    src={user.identity_image_url}
+                    alt=""
+                    className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                  />
+                ) : (
+                  <span className="w-8 h-8 rounded-full bg-bna-light text-bna-primary flex items-center justify-center text-xs font-semibold">
+                    {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
+                  </span>
+                )}
+                <span>{user?.first_name || 'Profil'}</span>
               </Link>
               <button
                 onClick={handleLogout}
@@ -128,8 +142,22 @@ export default function Navbar() {
               <Link to="/notifications" className="block text-gray-700">
                 Notifications
               </Link>
-              <Link to="/profile" className="block text-gray-700">
-                Profil
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 text-gray-700"
+              >
+                {user?.identity_image_url ? (
+                  <img
+                    src={user.identity_image_url}
+                    alt=""
+                    className="w-7 h-7 rounded-full object-cover border border-gray-200"
+                  />
+                ) : (
+                  <span className="w-7 h-7 rounded-full bg-bna-light text-bna-primary flex items-center justify-center text-xs font-semibold">
+                    {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
+                  </span>
+                )}
+                <span>Profil</span>
               </Link>
               {isAdmin && (
                 <Link to="/admin" className="block text-gray-700">

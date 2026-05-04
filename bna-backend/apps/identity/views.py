@@ -63,7 +63,9 @@ class LoginView(APIView):
             request_user_agent=request_user_agent,
         )
 
-        return success(AuthOutputSerializer(result).data)
+        return success(
+            AuthOutputSerializer(result, context={'request': request}).data,
+        )
 
 
 class LogoutView(APIView):

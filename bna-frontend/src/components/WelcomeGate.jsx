@@ -3,19 +3,24 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { useIsAuthenticated } from '../store/hooks'
 
-const STORAGE_KEY = 'bna_welcomed'
+const SKIP_PATHS = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+]
 
 /**
- * One-shot landing modal shown to anonymous visitors on first arrival.
- * Three doors:
+ * Landing modal shown to anonymous visitors. Three doors:
  *   - Nouveau visiteur → /register
  *   - Client           → /login
  *   - Agent            → /login
  *
- * Dismissal is persisted in localStorage so subsequent visits are
- * silent. Skipped entirely for authenticated users and for routes
- * where it would get in the way (auth pages and the welcome target
- * itself).
+ * Re-shows on every page (re)load and every navigation while the
+ * visitor is not authenticated, except on auth pages where it would
+ * get in the way. The "Continuer" button only dismisses the modal
+ * for the current page — navigating brings it back.
  */
 export default function WelcomeGate() {
   const isAuthenticated = useIsAuthenticated()
@@ -24,35 +29,15 @@ export default function WelcomeGate() {
 
   const [open, setOpen] = useState(false)
 
-  // Check the storage flag *only* on first mount + when auth changes,
-  // so a logout doesn't immediately re-pop the modal.
   useEffect(() => {
     if (isAuthenticated) {
       setOpen(false)
       return
     }
-    const skip = ['/login', '/register', '/forgot-password'].includes(pathname)
-    if (skip) {
-      setOpen(false)
-      return
-    }
-    try {
-      const seen = window.localStorage.getItem(STORAGE_KEY)
-      setOpen(!seen)
-    } catch {
-      setOpen(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated])
+    setOpen(!SKIP_PATHS.includes(pathname))
+  }, [isAuthenticated, pathname])
 
-  const dismiss = () => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, 'true')
-    } catch {
-      /* private mode — best-effort only */
-    }
-    setOpen(false)
-  }
+  const dismiss = () => setOpen(false)
 
   const choose = (target) => {
     dismiss()
