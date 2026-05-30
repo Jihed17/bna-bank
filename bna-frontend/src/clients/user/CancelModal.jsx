@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import toast from 'react-hot-toast'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 import { extractError } from '../../store/api/baseApi'
 import { useCancelAppointmentMutation } from '../../store/services/appointmentApi'
@@ -47,10 +49,7 @@ export default function CancelModal({ appointment, onClose }) {
             </span>
           </p>
           <p className="text-sm text-gray-500 mb-6">
-            {new Date(appointment.scheduled_at).toLocaleString('fr-TN', {
-              dateStyle: 'full',
-              timeStyle: 'short',
-            })}
+            {format(parseISO(appointment.scheduled_at), 'EEEE d MMMM yyyy à HH:mm', { locale: fr })}
           </p>
 
           <div className="mb-6">

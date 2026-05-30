@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 import CancelModal from '../clients/user/CancelModal'
 import { useGetAppointmentQuery } from '../store/services/appointmentApi'
@@ -70,10 +72,7 @@ export default function AppointmentDetail() {
               Date et heure
             </p>
             <p className="font-medium text-gray-900">
-              {new Date(appt.scheduled_at).toLocaleString('fr-TN', {
-                dateStyle: 'full',
-                timeStyle: 'short',
-              })}
+              {format(parseISO(appt.scheduled_at), 'EEEE d MMMM yyyy à HH:mm', { locale: fr })}
             </p>
           </div>
           <div>
@@ -115,10 +114,7 @@ export default function AppointmentDetail() {
                   <span className="capitalize">{log.to_status}</span>
                   <span className="text-gray-300">·</span>
                   <span>
-                    {new Date(log.changed_at).toLocaleString('fr-TN', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    })}
+                    {format(parseISO(log.changed_at), 'dd/MM/yyyy HH:mm', { locale: fr })}
                   </span>
                   {log.reason && (
                     <span className="text-gray-400 truncate">— {log.reason}</span>

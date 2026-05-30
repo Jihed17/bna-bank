@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 import { extractError } from '../store/api/baseApi'
 import {
@@ -299,10 +300,7 @@ export default function AppointmentForm() {
             </p>
             <p className="text-bna-primary">
               Créneau :{' '}
-              {new Date(slot).toLocaleString('fr-TN', {
-                dateStyle: 'full',
-                timeStyle: 'short',
-              })}
+              {format(parseISO(slot), 'EEEE d MMMM yyyy à HH:mm', { locale: fr })}
             </p>
           </div>
         )}

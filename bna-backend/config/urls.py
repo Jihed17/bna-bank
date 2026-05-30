@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/services/', include('apps.services.urls')),
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/reviews/', include('apps.reviews.urls')),
+    path('api/chatbot/', include('apps.chatbot.urls')),
 
     # Health check
     path('api/health/', include('core.urls')),

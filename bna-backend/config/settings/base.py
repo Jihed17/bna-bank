@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'apps.services',
     'apps.notifications',
     'apps.reviews',
+    'apps.chatbot',
 ]
 
 MIDDLEWARE = [

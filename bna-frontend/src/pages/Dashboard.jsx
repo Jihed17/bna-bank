@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 import { useCurrentUser, useIsAgent } from '../store/hooks'
 import { useGetAppointmentsQuery } from '../store/services/appointmentApi'
@@ -88,10 +90,7 @@ export default function Dashboard() {
                     {appt.service_name}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {new Date(appt.scheduled_at).toLocaleString('fr-TN', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    })}
+                    {format(parseISO(appt.scheduled_at), 'dd/MM/yyyy HH:mm', { locale: fr })}
                     {' — '}
                     {appt.agency_name}
                   </p>
